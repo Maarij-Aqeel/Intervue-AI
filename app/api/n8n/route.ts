@@ -1,4 +1,4 @@
-import { retrieveQuestions } from "@/lib/n8n";
+import { retrieveQuestions } from "@/lib/generateQuestions";
 
 export async function POST(req: Request) {
   const interview = await req.json();

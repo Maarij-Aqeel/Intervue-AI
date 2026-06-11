@@ -15,7 +15,7 @@ import Error from "@/components/Error";
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [error, setError] = useState<Error | null>(null);
-  const { interview, questions, isLoading } = useInterviewLogic({
+  const { interview, questions, questionsArray, isLoading } = useInterviewLogic({
     id,
     setError,
   });
@@ -58,6 +58,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         profile={profile}
         vapitime={vapitime}
         questions={questions}
+        questionsArray={questionsArray}
         transcript={transcript}
         setTranscript={setTranscript}
         setError={setError}

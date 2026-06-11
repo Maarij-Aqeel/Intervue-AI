@@ -17,6 +17,7 @@ export function useInterviewLogic({
   const [interview, setInterview] = useState<null | Interview>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [questions, setQuestions] = useState("");
+  const [questionsArray, setQuestionsArray] = useState<string[]>([]);
   const [interviewFound, setInterviewFound] = useState(true);
   const router = useRouter();
 
@@ -75,6 +76,7 @@ export function useInterviewLogic({
         if (data) {
           const formatted = FormatQuestions(data);
           setQuestions(formatted);
+          setQuestionsArray(data.output?.questions ?? []);
         }
       } catch (err) {
         console.error("Failed to fetch questions", err);
@@ -91,6 +93,7 @@ export function useInterviewLogic({
   return {
     interview,
     questions,
+    questionsArray,
     isLoading,
   };
 }

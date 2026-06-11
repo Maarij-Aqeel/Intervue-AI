@@ -69,7 +69,12 @@ export default function SingleInterview() {
   useEffect(() => {
     if (data && Array.isArray(data) && data.length > 0 && data[0]) {
       setSessionData(data[0]);
-      setQuestions(JSON.parse(data[0].questions));
+      try {
+        const raw = data[0].questions;
+        setQuestions(Array.isArray(raw) ? raw : (JSON.parse(raw) ?? []));
+      } catch {
+        setQuestions([]);
+      }
     }
   }, [data]);
 
@@ -311,6 +316,11 @@ export default function SingleInterview() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
+                      {(!questions || questions.length === 0) ? (
+                        <p className="text-gray-400 text-center py-8">
+                          Results are still being processed — please wait a moment.
+                        </p>
+                      ) : (
                       <Accordion
                         type="single"
                         collapsible
@@ -338,6 +348,7 @@ export default function SingleInterview() {
                           </AccordionItem>
                         ))}
                       </Accordion>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

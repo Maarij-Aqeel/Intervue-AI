@@ -1,19 +1,19 @@
 import { motion } from "framer-motion";
 import TranscriptBox from "@/components/Transcript";
 import Progress from "@/components/Progress";
-import VapiClient from "@/components/Vapi";
+import LiveKitInterview from "@/components/LiveKitInterview";
 import InterviewBackground from "./InterviewBackground";
 
 interface InterviewContentProps {
   progressValue: number;
   transcript: string[];
-  setTranscript: (transcript: string[]) => void;
-  questions: any[];
+  setTranscript: React.Dispatch<React.SetStateAction<string[]>>;
+  questionsArray: string[];
   timeLeft: number;
   stopCall: boolean;
   profile: any;
-  setError:any;
-  vapitime: string;
+  setError: any;
+  duration: number;
   interviewId: string;
 }
 
@@ -21,15 +21,14 @@ export const InterviewContent = ({
   progressValue,
   transcript,
   setTranscript,
-  questions,
+  questionsArray,
   timeLeft,
   stopCall,
   profile,
-  vapitime,
+  duration,
   interviewId,
-  setError
+  setError,
 }: InterviewContentProps) => {
-
   return (
     <>
       {/* Progress bar */}
@@ -54,17 +53,16 @@ export const InterviewContent = ({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.8 }}
         >
-          <VapiClient
-            Questions={questions}
+          <LiveKitInterview
+            questionsArray={questionsArray}
             timeleft={timeLeft}
             setError={setError}
             stopCall={stopCall}
-            name={profile?.name || "user"}
+            name={profile?.name || "Candidate"}
             setTranscript={setTranscript}
-            vapitime={vapitime}
             interviewId={interviewId}
             userId={profile?.id || ""}
-            assignedBy={profile?.is_company ? profile.id : null}
+            duration={duration}
           />
         </motion.div>
       </motion.div>

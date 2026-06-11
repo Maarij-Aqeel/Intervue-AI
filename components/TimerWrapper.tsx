@@ -10,14 +10,16 @@ export default function TimerWrapper({
   setError,
   vapitime,
   questions,
+  questionsArray,
   transcript,
   setTranscript,
 }: {
   interview: any;
-  setError:any
+  setError: any;
   profile: any;
   vapitime: string;
   questions: any;
+  questionsArray: string[];
   transcript: string[];
   setTranscript: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
@@ -41,11 +43,11 @@ export default function TimerWrapper({
         progressValue={progressValue}
         transcript={transcript}
         setTranscript={setTranscript}
-        questions={questions}
+        questionsArray={questionsArray}
         timeLeft={timeLeft}
         stopCall={stopCall}
-        profile={profile} 
-        vapitime={vapitime}
+        profile={profile}
+        duration={interview.duration}
         interviewId={interview.id}
         setError={setError}
       />
