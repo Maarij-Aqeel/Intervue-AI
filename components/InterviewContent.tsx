@@ -2,7 +2,6 @@ import { motion } from "framer-motion";
 import TranscriptBox from "@/components/Transcript";
 import Progress from "@/components/Progress";
 import LiveKitInterview, { TranscriptEntry } from "@/components/LiveKitInterview";
-import InterviewBackground from "./InterviewBackground";
 
 interface InterviewContentProps {
   progressValue: number;
@@ -16,6 +15,7 @@ interface InterviewContentProps {
   duration: number;
   interviewId: string;
   onAgentReady?: () => void;
+  audioLevelRef?: React.MutableRefObject<number>;
 }
 
 export const InterviewContent = ({
@@ -30,6 +30,7 @@ export const InterviewContent = ({
   interviewId,
   setError,
   onAgentReady,
+  audioLevelRef,
 }: InterviewContentProps) => {
   return (
     <>
@@ -38,45 +39,30 @@ export const InterviewContent = ({
         initial={{ opacity: 0, scaleX: 0 }}
         animate={{ opacity: 1, scaleX: 1 }}
         transition={{ duration: 0.8, delay: 0.3 }}
-        className="mt-8 w-full"
+        className="mt-6 w-full"
       >
         <Progress progress={progressValue} />
       </motion.div>
 
-      {/* Interview Assistant */}
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.5 }}
-        className="flex items-center justify-start mt-10 ml-10 relative"
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.8 }}
-        >
-          <LiveKitInterview
-            questionsArray={questionsArray}
-            timeleft={timeLeft}
-            setError={setError}
-            stopCall={stopCall}
-            name={profile?.name || "Candidate"}
-            setTranscript={setTranscript}
-            interviewId={interviewId}
-            userId={profile?.id || ""}
-            duration={duration}
-            onAgentReady={onAgentReady}
-          />
-        </motion.div>
-      </motion.div>
+      {/* Headless LiveKit connection (feeds the orb + transcript) */}
+      <LiveKitInterview
+        questionsArray={questionsArray}
+        timeleft={timeLeft}
+        setError={setError}
+        stopCall={stopCall}
+        name={profile?.name || "Candidate"}
+        setTranscript={setTranscript}
+        interviewId={interviewId}
+        userId={profile?.id || ""}
+        duration={duration}
+        onAgentReady={onAgentReady}
+        audioLevelRef={audioLevelRef}
+      />
 
-      {/* Transcript */}
-      <div className="flex justify-center">
+      {/* Live transcript — pinned center-bottom, on top of the glass layer */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 z-20">
         <TranscriptBox transcript={transcript} />
       </div>
-
-      {/* Background decoration */}
-      <InterviewBackground />
     </>
   );
 };

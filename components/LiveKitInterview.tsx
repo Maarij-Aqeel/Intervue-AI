@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { useRouter } from "next/navigation";
-import Pulse from "./CirclePulse";
 
 export interface TranscriptEntry {
   role: string;
@@ -21,6 +20,7 @@ interface LiveKitInterviewProps {
   setTranscript: React.Dispatch<React.SetStateAction<TranscriptEntry[]>>;
   setError: any;
   onAgentReady?: () => void;
+  audioLevelRef?: React.MutableRefObject<number>;
 }
 
 export default function LiveKitInterview({
@@ -34,6 +34,7 @@ export default function LiveKitInterview({
   setTranscript,
   setError,
   onAgentReady,
+  audioLevelRef,
 }: LiveKitInterviewProps) {
   const roomRef = useRef<Room | null>(null);
   const router = useRouter();
@@ -41,8 +42,51 @@ export default function LiveKitInterview({
   const agentReadyFiredRef = useRef(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
 
+  // Web Audio analysis — feeds the reactive orb via audioLevelRef
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analysersRef = useRef<AnalyserNode[]>([]);
+  const levelRafRef = useRef<number>(0);
+
+  const setupAnalyser = useCallback((mediaTrack: MediaStreamTrack) => {
+    const ac = audioCtxRef.current;
+    if (!ac) return;
+    try {
+      const stream = new MediaStream([mediaTrack]);
+      const source = ac.createMediaStreamSource(stream);
+      const analyser = ac.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.75;
+      source.connect(analyser); // analysis only — not connected to destination
+      analysersRef.current.push(analyser);
+    } catch (e) {
+      console.warn("[LiveKit] analyser setup failed:", e);
+    }
+  }, []);
+
+  const startLevelLoop = useCallback(() => {
+    if (levelRafRef.current) return;
+    const buf = new Uint8Array(128);
+    const tick = () => {
+      let max = 0;
+      for (const an of analysersRef.current) {
+        an.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / buf.length);
+        if (rms > max) max = rms;
+      }
+      if (audioLevelRef) audioLevelRef.current = Math.min(1, max * 3.2);
+      levelRafRef.current = requestAnimationFrame(tick);
+    };
+    tick();
+  }, [audioLevelRef]);
+
   const tryStartAudio = useCallback(() => {
     const room = roomRef.current;
+    audioCtxRef.current?.resume().catch(() => {});
     if (!room) return;
     room.startAudio()
       .then(() => setAudioBlocked(false))
@@ -70,6 +114,13 @@ export default function LiveKitInterview({
         const { token, url } = await res.json();
         const room = new Room();
         roomRef.current = room;
+
+        // Audio context for the reactive orb
+        const AC =
+          window.AudioContext ||
+          (window as any).webkitAudioContext;
+        audioCtxRef.current = new AC();
+        startLevelLoop();
 
         room.on(RoomEvent.DataReceived, (payload) => {
           try {
@@ -136,6 +187,8 @@ export default function LiveKitInterview({
             el.play().catch((e) =>
               console.warn("[LiveKit] audio.play() blocked:", e)
             );
+            // Feed agent voice into the reactive orb
+            if (track.mediaStreamTrack) setupAnalyser(track.mediaStreamTrack);
             // Signal that agent audio is live — fire once only
             if (!agentReadyFiredRef.current && !cleaned) {
               agentReadyFiredRef.current = true;
@@ -164,6 +217,12 @@ export default function LiveKitInterview({
         room.startAudio().catch(() => {});
 
         await room.localParticipant.setMicrophoneEnabled(true);
+
+        // Feed user mic into the reactive orb
+        const micTrack = room.localParticipant
+          .getTrackPublication(Track.Source.Microphone)
+          ?.track?.mediaStreamTrack;
+        if (micTrack) setupAnalyser(micTrack);
       } catch (err) {
         if (!cleaned) {
           console.error("[LiveKit] connection error:", err);
@@ -176,6 +235,11 @@ export default function LiveKitInterview({
 
     return () => {
       cleaned = true;
+      cancelAnimationFrame(levelRafRef.current);
+      levelRafRef.current = 0;
+      analysersRef.current = [];
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
       roomRef.current?.disconnect();
       roomRef.current = null;
     };
@@ -197,20 +261,16 @@ export default function LiveKitInterview({
       .catch(() => {});
   }, [timeleft]);
 
+  // Headless — the reactive orb (rendered by the parent) is the visual.
+  // Only surface the audio-unblock affordance when the browser blocks autoplay.
+  if (!audioBlocked) return null;
+
   return (
-    <div
-      className="relative cursor-pointer"
-      onClick={audioBlocked ? tryStartAudio : undefined}
-      title={audioBlocked ? "Click to enable audio" : undefined}
+    <button
+      onClick={tryStartAudio}
+      className="fixed top-24 left-1/2 -translate-x-1/2 z-30 bg-black/70 hover:bg-black/80 text-white text-sm font-semibold px-4 py-2 rounded-full backdrop-blur-md border border-white/10 transition-all"
     >
-      <Pulse />
-      {audioBlocked && (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <span className="bg-black/70 text-white text-xs font-semibold px-3 py-1.5 rounded-full pointer-events-none">
-            Tap to enable audio
-          </span>
-        </div>
-      )}
-    </div>
+      Tap to enable audio
+    </button>
   );
 }

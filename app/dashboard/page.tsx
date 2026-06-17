@@ -82,11 +82,30 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (allsessions) {
-      const parsed = allsessions.map((session: any) => ({
-        ...session,
-        questions: JSON.parse(session.questions),
-      }));
-      setAllSessions(parsed);
+      const parsed = allsessions.map((session: any) => {
+        let questions = session.questions;
+        if (typeof questions === "string") {
+          try {
+            questions = JSON.parse(questions);
+          } catch {
+            questions = [];
+          }
+        }
+        return { ...session, questions: questions ?? [] };
+      });
+
+      // Sort latest first — by session start, fall back to interview creation
+      const sorted = parsed.sort((a: any, b: any) => {
+        const ta = new Date(
+          a.started_at ?? a.interviews?.created_at ?? 0
+        ).getTime();
+        const tb = new Date(
+          b.started_at ?? b.interviews?.created_at ?? 0
+        ).getTime();
+        return tb - ta;
+      });
+
+      setAllSessions(sorted);
     }
   }, [allsessions]);
 

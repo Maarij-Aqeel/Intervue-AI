@@ -21,7 +21,7 @@ export default function TranscriptBox({
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 1 }}
-      className="mt-8 w-full sm:w-4/6 md:w-3/5 lg:w-2/5 mx-auto"
+      className="w-full mx-auto"
     >
       <div className="relative p-6 rounded-2xl border border-gray-600/30 bg-gradient-to-br from-gray-800/80 via-gray-900/90 to-black/80 shadow-2xl backdrop-blur-xl">
         {/* Header */}
