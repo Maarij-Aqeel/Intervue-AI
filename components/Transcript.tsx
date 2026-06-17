@@ -1,12 +1,21 @@
-// components/TranscriptBox.tsx
 "use client";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { TranscriptEntry } from "./LiveKitInterview";
 
 export default function TranscriptBox({
   transcript,
 }: {
-  transcript: string[];
+  transcript: TranscriptEntry[];
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [transcript]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -14,23 +23,13 @@ export default function TranscriptBox({
       transition={{ duration: 0.6, delay: 1 }}
       className="mt-8 w-full sm:w-4/6 md:w-3/5 lg:w-2/5 mx-auto"
     >
-      <motion.div
-        className="relative p-6 rounded-2xl border border-gray-600/30 bg-gradient-to-br from-gray-800/80 via-gray-900/90 to-black/80 shadow-2xl backdrop-blur-xl"
-        initial={{ backdropFilter: "blur(10px)" }}
-        animate={{ backdropFilter: "blur(15px)" }}
-        transition={{ duration: 2, repeat: Infinity, repeatType: "reverse" }}
-      >
-        <motion.div
-          className="flex items-center justify-between mb-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2 }}
-        >
+      <div className="relative p-6 rounded-2xl border border-gray-600/30 bg-gradient-to-br from-gray-800/80 via-gray-900/90 to-black/80 shadow-2xl backdrop-blur-xl">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
             Live Transcript
           </h2>
-
-          <motion.div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               {[...Array(4)].map((_, i) => (
                 <motion.div
@@ -56,49 +55,70 @@ export default function TranscriptBox({
             >
               Listening
             </motion.span>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
-        <div className="max-h-72 overflow-y-auto space-y-3 pr-3 custom-scrollbar">
-          {transcript.map((line, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              className="group relative"
-            >
-              <motion.div
-                className="absolute left-0 top-0 w-1 h-full bg-gradient-to-b from-secondary to-primary rounded-full"
-                initial={{ scaleY: 0 }}
-                animate={{ scaleY: 1 }}
-                transition={{ duration: 0.3, delay: index * 0.1 + 0.2 }}
-              />
-              <p className="text-sm text-gray-100 font-medium leading-relaxed pl-4 py-2 rounded-lg hover:bg-white/5 transition-all duration-300">
-                {line}
-              </p>
+        {/* Scrollable messages — scrollbar hidden, auto-scrolls to bottom */}
+        <div
+          ref={scrollRef}
+          className="max-h-72 overflow-y-auto space-y-3 pr-1"
+          style={{ scrollbarWidth: "none" }}
+        >
+          <AnimatePresence initial={false}>
+            {transcript.map((entry, index) => {
+              const isPending = entry.role === "user-pending";
+              const isAgent = entry.role === "assistant";
 
-              {index === transcript.length - 1 && (
-                <div className="flex items-center gap-1 ml-4 mt-1">
-                  {[...Array(3)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="w-1 h-1 bg-violet-400 rounded-full"
-                      animate={{
-                        opacity: [0.3, 1, 0.3],
-                        scale: [0.8, 1.2, 0.8],
-                      }}
-                      transition={{
-                        duration: 1,
-                        repeat: Infinity,
-                        delay: i * 0.2,
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          ))}
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.3 }}
+                  className={`flex flex-col gap-0.5 ${
+                    isAgent ? "items-start" : "items-end"
+                  }`}
+                >
+                  <span
+                    className={`text-xs font-semibold px-1 ${
+                      isAgent ? "text-primary/70" : "text-secondary/70"
+                    }`}
+                  >
+                    {isAgent ? "Alexis" : "You"}
+                  </span>
+
+                  <div
+                    className={`relative max-w-[90%] px-4 py-2 rounded-2xl text-sm font-medium leading-relaxed ${
+                      isAgent
+                        ? "bg-primary/10 border border-primary/20 text-gray-100 rounded-tl-none"
+                        : "bg-secondary/10 border border-secondary/20 text-gray-100 rounded-tr-none"
+                    }`}
+                  >
+                    {isPending ? (
+                      /* Typing indicator — three animated dots */
+                      <span className="flex items-center gap-1 h-4">
+                        {[...Array(3)].map((_, i) => (
+                          <motion.span
+                            key={i}
+                            className="w-1.5 h-1.5 rounded-full bg-secondary/70 inline-block"
+                            animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
+                            transition={{
+                              duration: 0.8,
+                              repeat: Infinity,
+                              delay: i * 0.15,
+                            }}
+                          />
+                        ))}
+                      </span>
+                    ) : (
+                      entry.text
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
 
           {transcript.length === 0 && (
             <motion.div
@@ -122,12 +142,9 @@ export default function TranscriptBox({
           )}
         </div>
 
-        <motion.div
-          className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-gray-900/90 to-transparent rounded-b-2xl pointer-events-none"
-          animate={{ opacity: [0.8, 1, 0.8] }}
-          transition={{ duration: 3, repeat: Infinity }}
-        />
-      </motion.div>
+        {/* Fade at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-gray-900/90 to-transparent rounded-b-2xl pointer-events-none" />
+      </div>
     </motion.div>
   );
 }

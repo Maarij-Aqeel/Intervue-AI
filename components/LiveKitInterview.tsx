@@ -5,6 +5,11 @@ import { Room, RoomEvent, Track } from "livekit-client";
 import { useRouter } from "next/navigation";
 import Pulse from "./CirclePulse";
 
+export interface TranscriptEntry {
+  role: string;
+  text: string;
+}
+
 interface LiveKitInterviewProps {
   stopCall: boolean;
   questionsArray: string[];
@@ -13,8 +18,9 @@ interface LiveKitInterviewProps {
   interviewId: string;
   userId: string;
   duration: number;
-  setTranscript: React.Dispatch<React.SetStateAction<string[]>>;
+  setTranscript: React.Dispatch<React.SetStateAction<TranscriptEntry[]>>;
   setError: any;
+  onAgentReady?: () => void;
 }
 
 export default function LiveKitInterview({
@@ -27,20 +33,19 @@ export default function LiveKitInterview({
   duration,
   setTranscript,
   setError,
+  onAgentReady,
 }: LiveKitInterviewProps) {
   const roomRef = useRef<Room | null>(null);
   const router = useRouter();
   const warningSentRef = useRef(false);
+  const agentReadyFiredRef = useRef(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
 
   const tryStartAudio = useCallback(() => {
     const room = roomRef.current;
     if (!room) return;
     room.startAudio()
-      .then(() => {
-        console.log("[LiveKit] startAudio() succeeded, canPlayback:", room.canPlaybackAudio);
-        setAudioBlocked(false);
-      })
+      .then(() => setAudioBlocked(false))
       .catch((err) => console.error("[LiveKit] startAudio() failed:", err));
   }, []);
 
@@ -70,10 +75,45 @@ export default function LiveKitInterview({
           try {
             const data = JSON.parse(new TextDecoder().decode(payload));
             if (data.type === "transcript" && data.text) {
-              setTranscript((prev) => [...prev, data.text]);
+              const role: string = data.role ?? "user";
+              setTranscript((prev) => {
+                // Remove any pending speaking indicator for this role
+                const filtered =
+                  prev[prev.length - 1]?.role === "user-pending"
+                    ? prev.slice(0, -1)
+                    : prev;
+                const last = filtered[filtered.length - 1];
+                // Merge consecutive messages from same speaker into one entry
+                if (last && last.role === role) {
+                  return [
+                    ...filtered.slice(0, -1),
+                    { role, text: last.text + " " + data.text },
+                  ];
+                }
+                return [...filtered, { role, text: data.text }];
+              });
             }
           } catch {
             // ignore malformed packets
+          }
+        });
+
+        room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+          const localSpeaking = speakers.some((p) => p.isLocal);
+          if (localSpeaking) {
+            setTranscript((prev) => {
+              if (prev[prev.length - 1]?.role === "user-pending") return prev;
+              return [...prev, { role: "user-pending", text: "" }];
+            });
+          } else {
+            // Give STT 1.5 s to commit; if no transcript arrives, drop indicator
+            setTimeout(() => {
+              setTranscript((prev) =>
+                prev[prev.length - 1]?.role === "user-pending"
+                  ? prev.slice(0, -1)
+                  : prev
+              );
+            }, 1500);
           }
         });
 
@@ -85,33 +125,32 @@ export default function LiveKitInterview({
         });
 
         room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
-          console.log("[LiveKit] AudioPlaybackStatusChanged, canPlayback:", room.canPlaybackAudio);
           if (!cleaned) setAudioBlocked(!room.canPlaybackAudio);
         });
 
-        room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
-          console.log("[LiveKit] TrackSubscribed:", track.kind, "from", participant.identity);
+        room.on(RoomEvent.TrackSubscribed, (track) => {
           if (track.kind === Track.Kind.Audio) {
-            console.log("[LiveKit] Attaching agent audio track");
             const el = track.attach();
-            // Ensure the element is live so the browser renders audio
             el.volume = 1;
             el.muted = false;
             el.play().catch((e) =>
               console.warn("[LiveKit] audio.play() blocked:", e)
             );
+            // Signal that agent audio is live — fire once only
+            if (!agentReadyFiredRef.current && !cleaned) {
+              agentReadyFiredRef.current = true;
+              onAgentReady?.();
+            }
           }
         });
 
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
           if (track.kind === Track.Kind.Audio) {
-            console.log("[LiveKit] Agent audio track unsubscribed");
             track.detach();
           }
         });
 
         await room.connect(url, token);
-        console.log("[LiveKit] Connected, canPlaybackAudio:", room.canPlaybackAudio);
 
         if (cleaned) {
           room.disconnect();
@@ -123,6 +162,8 @@ export default function LiveKitInterview({
         }
 
         room.startAudio().catch(() => {});
+
+        await room.localParticipant.setMicrophoneEnabled(true);
       } catch (err) {
         if (!cleaned) {
           console.error("[LiveKit] connection error:", err);

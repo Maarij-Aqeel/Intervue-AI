@@ -8,6 +8,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import Loading from "@/components/Loading";
+import FeedbackLoading from "@/components/FeedbackLoading";
 import useSWR from "swr";
 import {
   getStatusVariant,
@@ -62,7 +63,11 @@ export default function SingleInterview() {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       shouldRetryOnError: false,
-      refreshInterval: 2000, // Check after every 2 s
+      // Poll until evaluation completes, then stop.
+      refreshInterval: (latest) => {
+        const row = Array.isArray(latest) ? latest[0] : null;
+        return row?.status === "Completed" ? 0 : 2000;
+      },
     }
   );
 
@@ -84,6 +89,10 @@ export default function SingleInterview() {
 
   if (isLoading || !data || !session_data) {
     return <Loading msg1="Getting your interview results..." />;
+  }
+
+  if (session_data.status !== "Completed") {
+    return <FeedbackLoading />;
   }
 
   return (

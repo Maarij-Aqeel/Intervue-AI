@@ -78,21 +78,18 @@ export const insertsessions = async (
 
   const client = useAdmin ? await getAdminSupabase() : supabase;
 
-  const updatePayload: any = {
-    interview_id,
-    student_id,
-    scores,
-    status,
-    questions,
-    feedback,
-    started_at: startedAt,
-    completed_at: completedAt,
-  };
-
   const { error: updateError } = await client
     .from("interview_sessions")
-    .update(updatePayload)
-    .eq("interview_id", interview_id);
+    .update({
+      scores,
+      status,
+      questions,
+      feedback,
+      started_at: startedAt,
+      completed_at: completedAt,
+    })
+    .eq("interview_id", interview_id)
+    .eq("student_id", student_id);
 
   if (updateError) {
     console.error("Error updating session data: " + updateError.message);
@@ -110,7 +107,8 @@ export const getsessions = async (userid: string) => {
       *,interviews(id,title,difficulty,duration,created_at)
   `
     )
-    .eq("student_id", userid);
+    .eq("student_id", userid)
+    .order("started_at", { ascending: false });
 
   if (error) {
     console.log("Error getting user interviews ", error.message);

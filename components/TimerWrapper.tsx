@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useInterviewTimer } from "@/app/hooks/useInterviewTimer";
 import { InterviewHeader } from "@/components/InterviewHeader";
 import { InterviewContent } from "@/components/InterviewContent";
+import { TranscriptEntry } from "@/components/LiveKitInterview";
+import InterviewConnecting from "@/components/InterviewConnecting";
 
 export default function TimerWrapper({
   interview,
@@ -20,37 +23,48 @@ export default function TimerWrapper({
   vapitime: string;
   questions: any;
   questionsArray: string[];
-  transcript: string[];
-  setTranscript: React.Dispatch<React.SetStateAction<string[]>>;
+  transcript: TranscriptEntry[];
+  setTranscript: React.Dispatch<React.SetStateAction<TranscriptEntry[]>>;
 }) {
-  const {
-    minutes,seconds,timeLeft,progressValue,stopCall,setStopCall,} = useInterviewTimer({
-    duration: interview.duration,
-    interviewId: interview.id,
-    profile,
-  });
+  const [agentConnected, setAgentConnected] = useState(false);
+
+  const { minutes, seconds, timeLeft, progressValue, stopCall, setStopCall } =
+    useInterviewTimer({
+      duration: interview.duration,
+      interviewId: interview.id,
+      profile,
+      agentConnected,
+    });
 
   return (
-    <>
-      <InterviewHeader
-        minutes={minutes}
-        seconds={seconds}
-        timeLeft={timeLeft}
-        onEndInterview={() => setStopCall(true)}
-      />
+    <div className="w-full">
+      {/* Connecting overlay — shown until agent audio track arrives */}
+      {!agentConnected && <InterviewConnecting />}
 
-      <InterviewContent
-        progressValue={progressValue}
-        transcript={transcript}
-        setTranscript={setTranscript}
-        questionsArray={questionsArray}
-        timeLeft={timeLeft}
-        stopCall={stopCall}
-        profile={profile}
-        duration={interview.duration}
-        interviewId={interview.id}
-        setError={setError}
-      />
-    </>
+      {/* Interview UI — always mounted so LiveKit connects immediately;
+          hidden via CSS while agent is still joining */}
+      <div className={!agentConnected ? "hidden" : ""}>
+        <InterviewHeader
+          minutes={minutes}
+          seconds={seconds}
+          timeLeft={timeLeft}
+          onEndInterview={() => setStopCall(true)}
+        />
+
+        <InterviewContent
+          progressValue={progressValue}
+          transcript={transcript}
+          setTranscript={setTranscript}
+          questionsArray={questionsArray}
+          timeLeft={timeLeft}
+          stopCall={stopCall}
+          profile={profile}
+          duration={interview.duration}
+          interviewId={interview.id}
+          setError={setError}
+          onAgentReady={() => setAgentConnected(true)}
+        />
+      </div>
+    </div>
   );
 }

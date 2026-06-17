@@ -4,13 +4,13 @@ import gettime from "@/lib/time";
 import Loading from "@/components/Loading";
 import { useInterviewLogic } from "@/app/hooks/useInterviewLogic";
 import { TextFade } from "@/components/FadeUp";
-import { use, useEffect } from "react";
+import { use, useEffect, useState } from "react";
 import { useUser } from "@/app/context/user-context";
-import { useState } from "react";
 import TimerWrapper from "@/components/TimerWrapper";
 import { usePathname } from "next/navigation";
 import { useInterceptRouteChange } from "@/app/hooks/useInterceptRoute";
 import Error from "@/components/Error";
+import { TranscriptEntry } from "@/components/LiveKitInterview";
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -22,11 +22,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [pending, setPending] = useState(false);
   const { profile } = useUser();
   const pathname = usePathname();
-  const [transcript, setTranscript] = useState<string[]>([]);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
 
   useInterceptRouteChange(pending);
 
-  // Prevent route Change
   useEffect(() => {
     setPending(true);
   }, [pathname]);
@@ -42,8 +41,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
   if (error) {
     return <Error msg="Unable to generate Questions. Try again Later" />;
-  } else if (error && questions) {
-    return <Error msg="An Error occured when Staring Vapi. Try again later" />;
   }
 
   const vapitime = gettime(interview.duration * 60);

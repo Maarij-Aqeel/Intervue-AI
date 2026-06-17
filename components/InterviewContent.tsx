@@ -1,13 +1,13 @@
 import { motion } from "framer-motion";
 import TranscriptBox from "@/components/Transcript";
 import Progress from "@/components/Progress";
-import LiveKitInterview from "@/components/LiveKitInterview";
+import LiveKitInterview, { TranscriptEntry } from "@/components/LiveKitInterview";
 import InterviewBackground from "./InterviewBackground";
 
 interface InterviewContentProps {
   progressValue: number;
-  transcript: string[];
-  setTranscript: React.Dispatch<React.SetStateAction<string[]>>;
+  transcript: TranscriptEntry[];
+  setTranscript: React.Dispatch<React.SetStateAction<TranscriptEntry[]>>;
   questionsArray: string[];
   timeLeft: number;
   stopCall: boolean;
@@ -15,6 +15,7 @@ interface InterviewContentProps {
   setError: any;
   duration: number;
   interviewId: string;
+  onAgentReady?: () => void;
 }
 
 export const InterviewContent = ({
@@ -28,6 +29,7 @@ export const InterviewContent = ({
   duration,
   interviewId,
   setError,
+  onAgentReady,
 }: InterviewContentProps) => {
   return (
     <>
@@ -63,6 +65,7 @@ export const InterviewContent = ({
             interviewId={interviewId}
             userId={profile?.id || ""}
             duration={duration}
+            onAgentReady={onAgentReady}
           />
         </motion.div>
       </motion.div>

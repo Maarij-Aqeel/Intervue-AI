@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import logging
+import threading
 from datetime import datetime, timezone
 
 import aiohttp
@@ -159,13 +160,12 @@ async def entrypoint(ctx: JobContext) -> None:
         if not text:
             return
         conversation_log.append({"role": item.role, "content": text})
-        if item.role == "user":
-            asyncio.create_task(
-                ctx.room.local_participant.publish_data(
-                    json.dumps({"type": "transcript", "text": text}).encode(),
-                    reliable=True,
-                )
+        asyncio.create_task(
+            ctx.room.local_participant.publish_data(
+                json.dumps({"type": "transcript", "text": text, "role": item.role}).encode(),
+                reliable=True,
             )
+        )
 
     @ctx.room.on("data_received")
     def on_data(data: rtc.DataPacket) -> None:
@@ -204,10 +204,27 @@ async def entrypoint(ctx: JobContext) -> None:
         session.shutdown()
 
     completed_at = datetime.now(timezone.utc).isoformat()
-    logger.info("Extracting Q&A for interview %s", interview_id)
+    logger.info("Spawning evaluation thread for interview %s", interview_id)
 
-    qa = await _extract_qa(conversation_log, questions)
-    await _submit_evaluation(interview_id, user_id, qa, started_at, completed_at)
+    # Run evaluation in a non-daemon thread so it survives event loop shutdown.
+    # livekit-agents closes the asyncio event loop when entrypoint exits;
+    # asyncio.shield does NOT protect tasks from loop.close() — a thread does.
+    def _evaluation_thread() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            qa = loop.run_until_complete(_extract_qa(conversation_log, questions))
+            loop.run_until_complete(
+                _submit_evaluation(interview_id, user_id, qa, started_at, completed_at)
+            )
+            logger.info("Evaluation pipeline complete for %s", interview_id)
+        except Exception as exc:
+            logger.error("Evaluation thread error for %s: %s", interview_id, exc)
+        finally:
+            loop.close()
+
+    t = threading.Thread(target=_evaluation_thread, daemon=False)
+    t.start()
 
 
 if __name__ == "__main__":

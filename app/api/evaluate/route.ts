@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     const data = await res.json();
     const parsed = JSON.parse(data.choices[0].message.content);
 
-    await insertsessions(
+    const dbResult = await insertsessions(
       {
         interview_id: interviewId,
         student_id: userId,
@@ -71,6 +71,10 @@ export async function POST(req: Request) {
       },
       true
     );
+
+    if (dbResult?.error) {
+      throw new Error(`DB update failed: ${dbResult.error}`);
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {
