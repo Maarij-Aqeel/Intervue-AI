@@ -16,6 +16,18 @@ export default function TranscriptBox({
     }
   }, [transcript]);
 
+  // Group consecutive same-speaker chunks into one growing bubble
+  const groups: { role: string; text: string }[] = [];
+  for (const entry of transcript) {
+    if (!entry.text?.trim()) continue;
+    const last = groups[groups.length - 1];
+    if (last && last.role === entry.role) {
+      last.text = (last.text + " " + entry.text).trim();
+    } else {
+      groups.push({ role: entry.role, text: entry.text.trim() });
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -65,9 +77,8 @@ export default function TranscriptBox({
           style={{ scrollbarWidth: "none" }}
         >
           <AnimatePresence initial={false}>
-            {transcript.map((entry, index) => {
-              const isPending = entry.role === "user-pending";
-              const isAgent = entry.role === "assistant";
+            {groups.map((group, index) => {
+              const isAgent = group.role === "assistant";
 
               return (
                 <motion.div
@@ -95,32 +106,14 @@ export default function TranscriptBox({
                         : "bg-secondary/10 border border-secondary/20 text-gray-100 rounded-tr-none"
                     }`}
                   >
-                    {isPending ? (
-                      /* Typing indicator — three animated dots */
-                      <span className="flex items-center gap-1 h-4">
-                        {[...Array(3)].map((_, i) => (
-                          <motion.span
-                            key={i}
-                            className="w-1.5 h-1.5 rounded-full bg-secondary/70 inline-block"
-                            animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
-                            transition={{
-                              duration: 0.8,
-                              repeat: Infinity,
-                              delay: i * 0.15,
-                            }}
-                          />
-                        ))}
-                      </span>
-                    ) : (
-                      entry.text
-                    )}
+                    {group.text}
                   </div>
                 </motion.div>
               );
             })}
           </AnimatePresence>
 
-          {transcript.length === 0 && (
+          {groups.length === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.6 }}

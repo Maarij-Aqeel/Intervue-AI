@@ -5,8 +5,10 @@ import { Room, RoomEvent, Track } from "livekit-client";
 import { useRouter } from "next/navigation";
 
 export interface TranscriptEntry {
+  id: string;
   role: string;
   text: string;
+  final?: boolean;
 }
 
 interface LiveKitInterviewProps {
@@ -122,50 +124,27 @@ export default function LiveKitInterview({
         audioCtxRef.current = new AC();
         startLevelLoop();
 
-        room.on(RoomEvent.DataReceived, (payload) => {
-          try {
-            const data = JSON.parse(new TextDecoder().decode(payload));
-            if (data.type === "transcript" && data.text) {
-              const role: string = data.role ?? "user";
-              setTranscript((prev) => {
-                // Remove any pending speaking indicator for this role
-                const filtered =
-                  prev[prev.length - 1]?.role === "user-pending"
-                    ? prev.slice(0, -1)
-                    : prev;
-                const last = filtered[filtered.length - 1];
-                // Merge consecutive messages from same speaker into one entry
-                if (last && last.role === role) {
-                  return [
-                    ...filtered.slice(0, -1),
-                    { role, text: last.text + " " + data.text },
-                  ];
-                }
-                return [...filtered, { role, text: data.text }];
-              });
+        // Native streaming transcription — arrives in chunks as words are
+        // spoken (user STT interim/final) and as the agent's TTS plays.
+        room.on(RoomEvent.TranscriptionReceived, (segments, participant) => {
+          const isUser =
+            participant?.identity === userId || participant?.isLocal;
+          const role = isUser ? "user" : "assistant";
+          setTranscript((prev) => {
+            const next = [...prev];
+            for (const seg of segments) {
+              const entry: TranscriptEntry = {
+                id: seg.id,
+                role,
+                text: seg.text,
+                final: seg.final,
+              };
+              const idx = next.findIndex((e) => e.id === seg.id);
+              if (idx >= 0) next[idx] = entry;
+              else next.push(entry);
             }
-          } catch {
-            // ignore malformed packets
-          }
-        });
-
-        room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-          const localSpeaking = speakers.some((p) => p.isLocal);
-          if (localSpeaking) {
-            setTranscript((prev) => {
-              if (prev[prev.length - 1]?.role === "user-pending") return prev;
-              return [...prev, { role: "user-pending", text: "" }];
-            });
-          } else {
-            // Give STT 1.5 s to commit; if no transcript arrives, drop indicator
-            setTimeout(() => {
-              setTranscript((prev) =>
-                prev[prev.length - 1]?.role === "user-pending"
-                  ? prev.slice(0, -1)
-                  : prev
-              );
-            }, 1500);
-          }
+            return next;
+          });
         });
 
         room.on(RoomEvent.Disconnected, () => {

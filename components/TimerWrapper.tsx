@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import dynamic from "next/dynamic";
 import { useInterviewTimer } from "@/app/hooks/useInterviewTimer";
 import { InterviewHeader } from "@/components/InterviewHeader";
 import { InterviewContent } from "@/components/InterviewContent";
 import { TranscriptEntry } from "@/components/LiveKitInterview";
-import InterviewConnecting from "@/components/InterviewConnecting";
 
 // 3D canvas — client only, no SSR
 const VoiceOrb = dynamic(() => import("@/components/VoiceOrb"), { ssr: false });
@@ -20,6 +19,8 @@ export default function TimerWrapper({
   questionsArray,
   transcript,
   setTranscript,
+  agentConnected,
+  onAgentReady,
 }: {
   interview: any;
   setError: any;
@@ -29,8 +30,9 @@ export default function TimerWrapper({
   questionsArray: string[];
   transcript: TranscriptEntry[];
   setTranscript: React.Dispatch<React.SetStateAction<TranscriptEntry[]>>;
+  agentConnected: boolean;
+  onAgentReady: () => void;
 }) {
-  const [agentConnected, setAgentConnected] = useState(false);
   // Shared mutable audio level (0..1) — written by LiveKit analysis,
   // read by the orb in its own rAF loop (no re-renders).
   const audioLevelRef = useRef(0);
@@ -54,15 +56,8 @@ export default function TimerWrapper({
           with bottom darkening for transcript legibility */}
       <div className="fixed inset-0 z-0 backdrop-blur-sm bg-gradient-to-b from-transparent via-black/10 to-black/40 pointer-events-none" />
 
-      {/* Connecting overlay — shown until agent audio track arrives */}
-      {!agentConnected && (
-        <div className="relative z-20">
-          <InterviewConnecting />
-        </div>
-      )}
-
-      {/* Interview UI — always mounted so LiveKit connects immediately */}
-      <div className={`relative z-10 ${!agentConnected ? "hidden" : ""}`}>
+      {/* Foreground interview UI */}
+      <div className="relative z-10">
         <InterviewHeader
           minutes={minutes}
           seconds={seconds}
@@ -81,7 +76,7 @@ export default function TimerWrapper({
           duration={interview.duration}
           interviewId={interview.id}
           setError={setError}
-          onAgentReady={() => setAgentConnected(true)}
+          onAgentReady={onAgentReady}
           audioLevelRef={audioLevelRef}
         />
       </div>

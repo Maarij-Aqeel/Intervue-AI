@@ -63,10 +63,11 @@ export default function SingleInterview() {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       shouldRetryOnError: false,
-      // Poll until evaluation completes, then stop.
+      // Poll until evaluation completes or the interview is marked pending.
       refreshInterval: (latest) => {
         const row = Array.isArray(latest) ? latest[0] : null;
-        return row?.status === "Completed" ? 0 : 2000;
+        const s = row?.status;
+        return s === "Completed" || s === "pending" ? 0 : 2000;
       },
     }
   );
@@ -89,6 +90,32 @@ export default function SingleInterview() {
 
   if (isLoading || !data || !session_data) {
     return <Loading msg1="Getting your interview results..." />;
+  }
+
+  // Interview ended before any answer — nothing to evaluate.
+  if (session_data.status?.toLowerCase() === "pending") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-6 text-center px-4 bg-hero-gradient text-white">
+        <div className="w-16 h-16 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+        </div>
+        <div className="space-y-2 max-w-md">
+          <h2 className="text-2xl font-bold">Interview not completed</h2>
+          <p className="text-gray-400">
+            This interview ended before any answers were recorded, so there's
+            no feedback to show. You can retake it whenever you're ready.
+          </p>
+        </div>
+        <Button
+          asChild
+          className="bg-primary text-gray-900 hover:bg-primary/90 px-6 py-5 rounded-full font-semibold"
+        >
+          <Link href="/dashboard">Back to Dashboard</Link>
+        </Button>
+      </div>
+    );
   }
 
   if (session_data.status !== "Completed") {

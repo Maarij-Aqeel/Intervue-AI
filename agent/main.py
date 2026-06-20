@@ -78,6 +78,7 @@ async def _submit_evaluation(
     qa: list[dict],
     started_at: str,
     completed_at: str,
+    incomplete: bool = False,
 ) -> None:
     next_app_url = os.environ.get("NEXT_APP_URL", "http://localhost:3000").rstrip("/")
     try:
@@ -90,6 +91,7 @@ async def _submit_evaluation(
                     "startedAt": started_at,
                     "completedAt": completed_at,
                     "qa": qa,
+                    "incomplete": incomplete,
                 },
                 timeout=aiohttp.ClientTimeout(total=60),
             ) as resp:
@@ -110,11 +112,16 @@ class InterviewAgent(Agent):
         self._duration = duration
 
     async def on_enter(self) -> None:
-        await self.session.say(
-            f"Hello {self._name}, I'm Alexis. I'll be conducting your technical interview today. "
-            f"We have {self._duration} minutes and I'll ask you {len(self._questions)} questions. "
-            "Take your time with each answer — I value clear reasoning. Ready to begin?",
-            allow_interruptions=False,
+        # Let the LLM generate a natural, warm opening per the system prompt
+        # instead of a fixed scripted line.
+        await self.session.generate_reply(
+            instructions=(
+                f"Greet {self._name} warmly by name, introduce yourself as Alexis, "
+                f"briefly set expectations (about {self._duration} minutes, around "
+                f"{len(self._questions)} questions, conversational, no trick questions), "
+                "and ask if they're ready to begin. Keep it natural and spoken — 3 to 4 "
+                "short sentences."
+            ),
         )
 
 
@@ -139,7 +146,14 @@ async def entrypoint(ctx: JobContext) -> None:
     conversation_log: list[dict] = []
 
     session = AgentSession(
-        stt=deepgram.STT(model="nova-3", language="en-US"),
+        stt=deepgram.STT(
+            model="nova-3",
+            language="en-US",
+            # Stream partial words live + punctuate so transcript arrives in chunks
+            interim_results=True,
+            punctuate=True,
+            smart_format=True,
+        ),
         llm=lk_openai.LLM(
             model=DEEPSEEK_FLASH,
             api_key=OPENROUTER_API_KEY,
@@ -151,6 +165,9 @@ async def entrypoint(ctx: JobContext) -> None:
         vad=silero.VAD.load(),
     )
 
+    # Build the conversation log for evaluation. Live transcript streaming is
+    # handled natively by AgentSession (forwarded to the room as transcription
+    # segments) — the browser listens via RoomEvent.TranscriptionReceived.
     @session.on("conversation_item_added")
     def on_item_added(ev) -> None:
         item = ev.item
@@ -160,12 +177,6 @@ async def entrypoint(ctx: JobContext) -> None:
         if not text:
             return
         conversation_log.append({"role": item.role, "content": text})
-        asyncio.create_task(
-            ctx.room.local_participant.publish_data(
-                json.dumps({"type": "transcript", "text": text, "role": item.role}).encode(),
-                reliable=True,
-            )
-        )
 
     @ctx.room.on("data_received")
     def on_data(data: rtc.DataPacket) -> None:
@@ -204,7 +215,18 @@ async def entrypoint(ctx: JobContext) -> None:
         session.shutdown()
 
     completed_at = datetime.now(timezone.utc).isoformat()
-    logger.info("Spawning evaluation thread for interview %s", interview_id)
+
+    # Did the candidate actually answer anything? If the interview was
+    # terminated before a single real answer, mark it pending — not completed.
+    answered = any(
+        m["role"] == "user" and m.get("content", "").strip()
+        for m in conversation_log
+    )
+    logger.info(
+        "Spawning evaluation thread for interview %s (answered=%s)",
+        interview_id,
+        answered,
+    )
 
     # Run evaluation in a non-daemon thread so it survives event loop shutdown.
     # livekit-agents closes the asyncio event loop when entrypoint exits;
@@ -213,6 +235,16 @@ async def entrypoint(ctx: JobContext) -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
+            if not answered:
+                # No answers given — record as pending, skip LLM evaluation.
+                loop.run_until_complete(
+                    _submit_evaluation(
+                        interview_id, user_id, [], started_at, completed_at,
+                        incomplete=True,
+                    )
+                )
+                logger.info("Interview %s marked pending (no answers)", interview_id)
+                return
             qa = loop.run_until_complete(_extract_qa(conversation_log, questions))
             loop.run_until_complete(
                 _submit_evaluation(interview_id, user_id, qa, started_at, completed_at)

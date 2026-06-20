@@ -20,11 +20,43 @@ Return ONLY valid JSON with this exact structure:
 
 export async function POST(req: Request) {
   try {
-    const { interviewId, userId, startedAt, completedAt, qa } =
+    const { interviewId, userId, startedAt, completedAt, qa, incomplete } =
       await req.json();
 
-    if (!interviewId || !userId || !Array.isArray(qa) || qa.length === 0) {
+    if (!interviewId || !userId) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+    }
+
+    // Interview terminated before any real answer — mark pending, skip evaluation.
+    const noAnswers =
+      incomplete ||
+      !Array.isArray(qa) ||
+      qa.length === 0 ||
+      qa.every(
+        (p: { answer?: string }) =>
+          !p.answer ||
+          !p.answer.trim() ||
+          p.answer.trim().toLowerCase() === "no answer provided"
+      );
+
+    if (noAnswers) {
+      const dbResult = await insertsessions(
+        {
+          interview_id: interviewId,
+          student_id: userId,
+          scores: 0,
+          status: "pending",
+          questions: [],
+          feedback: { strengths: "", needed_improvements: "" },
+          startedAt: startedAt ?? new Date().toISOString(),
+          completedAt: completedAt ?? new Date().toISOString(),
+        },
+        true
+      );
+      if (dbResult?.error) {
+        throw new Error(`DB update failed: ${dbResult.error}`);
+      }
+      return NextResponse.json({ success: true, status: "pending" });
     }
 
     const userResponse = qa
